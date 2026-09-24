@@ -1,7 +1,7 @@
 name: Build spotifast Windows x64
 
 on:
-  workflow_dispatch: # Permite lanzar la compilación manualmente con un clic
+  workflow_dispatch:
   push:
     branches: [ master, main ]
 
@@ -15,42 +15,53 @@ jobs:
         with:
           submodules: recursive
 
+      # 1. Configura el entorno oficial de Visual Studio 2022 (x64)
+      - name: Set up MSVC environment
+        uses: ilammy/msvc-dev-cmd@v1
+        with:
+          arch: x64
+
+      # 2. Instala la dependencia necesaria con vcpkg
       - name: Install dependencies via vcpkg
         run: |
           vcpkg install glew:x64-windows-static
 
+      # 3. Clona y compila libprojectM con Ninja + Clang-CL
       - name: Clone and build libprojectM
-        shell: bash
         run: |
-          git clone --recursive https://github.com/projectM-visualizer/projectm.git
-          cd projectm
-          mkdir build && cd build
-          cmake .. -G "Visual Studio 17 2022" -A x64 \
-            -DCMAKE_TOOLCHAIN_FILE="$VCPKG_INSTALLATION_ROOT/scripts/buildsystems/vcpkg.cmake" \
-            -DVCPKG_TARGET_TRIPLET=x64-windows-static \
-            -DCMAKE_INSTALL_PREFIX="$GITHUB_WORKSPACE/install_projectm"
-          cmake --build . --config Release --target install
+          git clone --recursive --branch v3.1.12 https://github.com/projectM-visualizer/projectm.git projectm
+          cmake -B projectm/build -S projectm -G Ninja ^
+            -DCMAKE_C_COMPILER=clang-cl ^
+            -DCMAKE_CXX_COMPILER=clang-cl ^
+            -DCMAKE_BUILD_TYPE=Release ^
+            -DCMAKE_TOOLCHAIN_FILE="%VCPKG_INSTALLATION_ROOT%\scripts\buildsystems\vcpkg.cmake" ^
+            -DVCPKG_TARGET_TRIPLET=x64-windows-static ^
+            -DCMAKE_INSTALL_PREFIX="%GITHUB_WORKSPACE%\install_projectm"
+          cmake --build projectm/build --target install
+        shell: cmd
 
+      # 4. Configura y compila spotifast
       - name: Configure and build spotifast
-        shell: bash
         run: |
-          mkdir build && cd build
-          cmake .. -G "Visual Studio 17 2022" -A x64 \
-            -DCMAKE_TOOLCHAIN_FILE="$VCPKG_INSTALLATION_ROOT/scripts/buildsystems/vcpkg.cmake" \
-            -DCMAKE_PREFIX_PATH="$GITHUB_WORKSPACE/install_projectm"
-          cmake --build . --config Release
+          cmake -B build -S . -G Ninja ^
+            -DCMAKE_C_COMPILER=clang-cl ^
+            -DCMAKE_CXX_COMPILER=clang-cl ^
+            -DCMAKE_BUILD_TYPE=Release ^
+            -DCMAKE_TOOLCHAIN_FILE="%VCPKG_INSTALLATION_ROOT%\scripts\buildsystems\vcpkg.cmake" ^
+            -DVCPKG_TARGET_TRIPLET=x64-windows-static ^
+            -DCMAKE_PREFIX_PATH="%GITHUB_WORKSPACE%\install_projectm"
+          cmake --build build
+        shell: cmd
 
+      # 5. Empaqueta el ejecutable y librerías resultantes
       - name: Prepare build artifacts
-        shell: bash
         run: |
-          mkdir -p output
-          # Copiar el ejecutable
-          cp build/Release/spotifast.exe output/ || cp build/spotifast.exe output/ || true
-          # Copiar DLLs si libprojectM generó alguna dinámica
-          if [ -d "$GITHUB_WORKSPACE/install_projectm/bin" ]; then
-            cp $GITHUB_WORKSPACE/install_projectm/bin/*.dll output/ || true
-          fi
+          mkdir output
+          if exist build\spotifast.exe copy build\spotifast.exe output\
+          if exist install_projectm\bin\*.dll copy install_projectm\bin\*.dll output\
+        shell: cmd
 
+      # 6. Sube el ZIP listo para descargar
       - name: Upload spotifast artifact
         uses: actions/upload-artifact@v4
         with:
