@@ -13,13 +13,38 @@ jobs:
       - name: Checkout spotifast
         uses: actions/checkout@v4
 
-      - name: Setup MSBuild
-        uses: microsoft/setup-msbuild@v2
+      # 1. Configurar LLVM (requerido para bindgen si compila bindings C)
+      - name: Install LLVM
+        run: choco install llvm -y
 
-      - name: Inspect repository contents
-        shell: cmd
+      # 2. Instalar dependencias nativas vía vcpkg
+      - name: Install vcpkg dependencies
         run: |
-          echo "=== ARCHIVOS EN LA RAIZ ==="
-          dir /b
-          echo "=== PROYECTOS ENCONTRADOS ==="
-          dir /s /b *.sln *.vcxproj CMakeLists.txt Makefile
+          vcpkg install glew:x64-windows-static
+        env:
+          VCPKG_ROOT: C:\vcpkg
+
+      # 3. Configurar entorno de Rust
+      - name: Setup Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      # 4. Compilar con Cargo en Release
+      - name: Build with Cargo
+        run: cargo build --release --verbose
+        env:
+          VCPKG_ROOT: C:\vcpkg
+          LIBCLANG_PATH: 'C:\Program Files\LLVM\bin'
+
+      # 5. Empaquetar el ejecutable resultante
+      - name: Prepare build artifacts
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path output
+          Get-ChildItem -Path target/release -Filter "*.exe" | Copy-Item -Destination output/
+
+      # 6. Subir el artefacto
+      - name: Upload spotifast artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: spotifast-windows-x64
+          path: output/
