@@ -13,43 +13,44 @@ jobs:
       - name: Checkout spotifast
         uses: actions/checkout@v4
 
-      # 1. Cargar el entorno de Visual Studio 2022 (evita el error 'could not find any instance of Visual Studio')
+      # 1. Configura el entorno nativo de Visual Studio (carga cl.exe, LIB, INCLUDE)
       - name: Set up MSVC environment
         uses: ilammy/msvc-dev-cmd@v1
         with:
           arch: x64
 
-      # 2. Instalar LLVM para bindgen
-      - name: Install LLVM
-        run: choco install llvm -y
-
-      # 3. Instalar GLEW estático con vcpkg
+      # 2. Instalar GLEW estático con vcpkg
       - name: Install vcpkg dependencies
         run: |
           vcpkg install glew:x64-windows-static
 
-      # 4. Configurar la toolchain de Rust
+      # 3. Toolchain de Rust
       - name: Setup Rust toolchain
         uses: dtolnay/rust-toolchain@stable
 
-      # 5. Compilar con Cargo en Release con todas las variables de entorno pasadas a cmake-rs
+      # 4. Compilación con Cargo forzando Ninja en cmake-rs
       - name: Build with Cargo
         run: cargo build --release --verbose
         env:
+          CMAKE_GENERATOR: Ninja
           VCPKG_ROOT: C:\vcpkg
           VCPKG_INSTALLATION_ROOT: C:\vcpkg
           LIBCLANG_PATH: 'C:\Program Files\LLVM\bin'
 
-      # 6. Guardar los ejecutables generados
+      # 5. Empaquetar y renombrar como Spotijow.exe
       - name: Prepare build artifacts
         shell: pwsh
         run: |
           New-Item -ItemType Directory -Force -Path output
-          Get-ChildItem -Path target/release -Filter "*.exe" | Copy-Item -Destination output/
+          if (Test-Path "target/release/spotifast.exe") {
+              Copy-Item "target/release/spotifast.exe" -Destination "output/Spotijow.exe"
+          } else {
+              Get-ChildItem -Path target/release -Filter "*.exe" | Copy-Item -Destination "output/"
+          }
 
-      # 7. Subir el artefacto
+      # 6. Subir el artefacto
       - name: Upload spotifast artifact
         uses: actions/upload-artifact@v4
         with:
-          name: spotifast-windows-x64
+          name: Spotijow-windows-x64
           path: output/
