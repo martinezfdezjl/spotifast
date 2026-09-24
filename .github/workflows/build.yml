@@ -12,33 +12,25 @@ jobs:
     steps:
       - name: Checkout spotifast
         uses: actions/checkout@v4
-        with:
-          submodules: recursive
 
-      - name: Set up MSVC environment
-        uses: ilammy/msvc-dev-cmd@v1
-        with:
-          arch: x64
+      - name: Setup MSBuild
+        uses: microsoft/setup-msbuild@v2
 
       - name: Install dependencies via vcpkg
         run: |
           vcpkg install glew:x64-windows-static projectm:x64-windows-static
+          vcpkg integrate install
 
-      - name: Configure and build spotifast
-        shell: cmd
+      - name: Build with MSBuild
         run: |
-          cmake -B build -S . -G Ninja ^
-            -DCMAKE_BUILD_TYPE=Release ^
-            -DCMAKE_TOOLCHAIN_FILE="%VCPKG_INSTALLATION_ROOT%\scripts\buildsystems\vcpkg.cmake" ^
-            -DVCPKG_TARGET_TRIPLET=x64-windows-static
-          cmake --build build --config Release
+          msbuild spotifast.sln /p:Configuration=Release /p:Platform=x64
 
       - name: Prepare build artifacts
         shell: cmd
         run: |
           mkdir output
-          if exist build\spotifast.exe copy build\spotifast.exe output\
-          if exist build\Release\spotifast.exe copy build\Release\spotifast.exe output\
+          dir /s /b *.exe
+          for /r %%i in (spotifast.exe) do copy "%%i" output\
 
       - name: Upload spotifast artifact
         uses: actions/upload-artifact@v4
