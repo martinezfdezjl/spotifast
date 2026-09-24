@@ -28,46 +28,45 @@ jobs:
 
       # 3. Clona y compila libprojectM
       - name: Clone and build libprojectM
+        shell: pwsh
         run: |
           git clone --recursive https://github.com/projectM-visualizer/projectm.git projectm
           cd projectm
-          git checkout v3.1.12 || git checkout v3.1.2 || true
+          git checkout v3.1.12
+          git submodule update --init --recursive
           cd ..
-          
-          REM Comprobar si CMakeLists.txt está en la raíz o en src/libprojectM
-          if exist "projectm\CMakeLists.txt" (
-            set "PM_SRC=projectm"
-          ) else if exist "projectm\src\libprojectM\CMakeLists.txt" (
-            set "PM_SRC=projectm\src\libprojectM"
-          ) else (
-            set "PM_SRC=projectm\src"
-          )
-          
-          echo "Usando carpeta fuente: %PM_SRC%"
 
-          cmake -B projectm/build -S %PM_SRC% -G Ninja ^
-            -DCMAKE_C_COMPILER=clang-cl ^
-            -DCMAKE_CXX_COMPILER=clang-cl ^
-            -DCMAKE_BUILD_TYPE=Release ^
-            -DCMAKE_TOOLCHAIN_FILE="%VCPKG_INSTALLATION_ROOT%\scripts\buildsystems\vcpkg.cmake" ^
-            -DVCPKG_TARGET_TRIPLET=x64-windows-static ^
-            -DCMAKE_INSTALL_PREFIX="%GITHUB_WORKSPACE%\install_projectm"
-            
+          # Localizar automáticamente dónde está el CMakeLists.txt principal
+          $cmakeFile = Get-ChildItem -Path "projectm" -Filter "CMakeLists.txt" -Recurse | Where-Object { 
+              $_.DirectoryName -match "libprojectM$" -or $_.DirectoryName -eq "$((Get-Item .).FullName)\projectm" 
+          } | Select-Object -First 1
+
+          $sourceDir = if ($cmakeFile) {$cmakeFile.DirectoryName } else { "projectm" }
+          Write-Host "Directorio CMake detectado: $sourceDir"
+
+          cmake -B projectm/build -S $sourceDir -G Ninja `
+            -DCMAKE_C_COMPILER=clang-cl `
+            -DCMAKE_CXX_COMPILER=clang-cl `
+            -DCMAKE_BUILD_TYPE=Release `
+            -DCMAKE_TOOLCHAIN_FILE="$env:VCPKG_INSTALLATION_ROOT/scripts/buildsystems/vcpkg.cmake" `
+            -DVCPKG_TARGET_TRIPLET=x64-windows-static `
+            -DCMAKE_INSTALL_PREFIX="$env:GITHUB_WORKSPACE/install_projectm"
+
           cmake --build projectm/build --target install
-        shell: cmd
 
       # 4. Configura y compila spotifast
       - name: Configure and build spotifast
+        shell: pwsh
         run: |
-          cmake -B build -S . -G Ninja ^
-            -DCMAKE_C_COMPILER=clang-cl ^
-            -DCMAKE_CXX_COMPILER=clang-cl ^
-            -DCMAKE_BUILD_TYPE=Release ^
-            -DCMAKE_TOOLCHAIN_FILE="%VCPKG_INSTALLATION_ROOT%\scripts\buildsystems\vcpkg.cmake" ^
-            -DVCPKG_TARGET_TRIPLET=x64-windows-static ^
-            -DCMAKE_PREFIX_PATH="%GITHUB_WORKSPACE%\install_projectm"
+          cmake -B build -S . -G Ninja `
+            -DCMAKE_C_COMPILER=clang-cl `
+            -DCMAKE_CXX_COMPILER=clang-cl `
+            -DCMAKE_BUILD_TYPE=Release `
+            -DCMAKE_TOOLCHAIN_FILE="$env:VCPKG_INSTALLATION_ROOT/scripts/buildsystems/vcpkg.cmake" `
+            -DVCPKG_TARGET_TRIPLET=x64-windows-static `
+            -DCMAKE_PREFIX_PATH="$env:GITHUB_WORKSPACE/install_projectm"
+
           cmake --build build
-        shell: cmd
 
       # 5. Empaqueta el ejecutable y librerías resultantes
       - name: Prepare build artifacts
