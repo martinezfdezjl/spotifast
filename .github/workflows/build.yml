@@ -16,24 +16,10 @@ jobs:
       - name: Setup MSBuild
         uses: microsoft/setup-msbuild@v2
 
-      - name: Install dependencies via vcpkg
-        run: |
-          vcpkg install glew:x64-windows-static projectm:x64-windows-static
-          vcpkg integrate install
-
-      - name: Build with MSBuild
-        run: |
-          msbuild spotifast.sln /p:Configuration=Release /p:Platform=x64
-
-      - name: Prepare build artifacts
+      - name: Inspect repository contents
         shell: cmd
         run: |
-          mkdir output
-          dir /s /b *.exe
-          for /r %%i in (spotifast.exe) do copy "%%i" output\
-
-      - name: Upload spotifast artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: spotifast-windows-x64
-          path: output/
+          echo "=== ARCHIVOS EN LA RAIZ ==="
+          dir /b
+          echo "=== PROYECTOS ENCONTRADOS ==="
+          dir /s /b *.sln *.vcxproj CMakeLists.txt Makefile
