@@ -13,36 +13,41 @@ jobs:
       - name: Checkout spotifast
         uses: actions/checkout@v4
 
-      # 1. Configurar LLVM (requerido para bindgen si compila bindings C)
+      # 1. Cargar el entorno de Visual Studio 2022 (evita el error 'could not find any instance of Visual Studio')
+      - name: Set up MSVC environment
+        uses: ilammy/msvc-dev-cmd@v1
+        with:
+          arch: x64
+
+      # 2. Instalar LLVM para bindgen
       - name: Install LLVM
         run: choco install llvm -y
 
-      # 2. Instalar dependencias nativas vía vcpkg
+      # 3. Instalar GLEW estático con vcpkg
       - name: Install vcpkg dependencies
         run: |
           vcpkg install glew:x64-windows-static
-        env:
-          VCPKG_ROOT: C:\vcpkg
 
-      # 3. Configurar entorno de Rust
+      # 4. Configurar la toolchain de Rust
       - name: Setup Rust toolchain
         uses: dtolnay/rust-toolchain@stable
 
-      # 4. Compilar con Cargo en Release
+      # 5. Compilar con Cargo en Release con todas las variables de entorno pasadas a cmake-rs
       - name: Build with Cargo
         run: cargo build --release --verbose
         env:
           VCPKG_ROOT: C:\vcpkg
+          VCPKG_INSTALLATION_ROOT: C:\vcpkg
           LIBCLANG_PATH: 'C:\Program Files\LLVM\bin'
 
-      # 5. Empaquetar el ejecutable resultante
+      # 6. Guardar los ejecutables generados
       - name: Prepare build artifacts
         shell: pwsh
         run: |
           New-Item -ItemType Directory -Force -Path output
           Get-ChildItem -Path target/release -Filter "*.exe" | Copy-Item -Destination output/
 
-      # 6. Subir el artefacto
+      # 7. Subir el artefacto
       - name: Upload spotifast artifact
         uses: actions/upload-artifact@v4
         with:
