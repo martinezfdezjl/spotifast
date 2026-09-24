@@ -26,17 +26,33 @@ jobs:
         run: |
           vcpkg install glew:x64-windows-static
 
-      # 3. Clona y compila libprojectM con Ninja + Clang-CL
+      # 3. Clona y compila libprojectM
       - name: Clone and build libprojectM
         run: |
-          git clone --recursive --branch v3.1.12 https://github.com/projectM-visualizer/projectm.git projectm
-          cmake -B projectm/build -S projectm -G Ninja ^
+          git clone --recursive https://github.com/projectM-visualizer/projectm.git projectm
+          cd projectm
+          git checkout v3.1.12 || git checkout v3.1.2 || true
+          cd ..
+          
+          REM Comprobar si CMakeLists.txt está en la raíz o en src/libprojectM
+          if exist "projectm\CMakeLists.txt" (
+            set "PM_SRC=projectm"
+          ) else if exist "projectm\src\libprojectM\CMakeLists.txt" (
+            set "PM_SRC=projectm\src\libprojectM"
+          ) else (
+            set "PM_SRC=projectm\src"
+          )
+          
+          echo "Usando carpeta fuente: %PM_SRC%"
+
+          cmake -B projectm/build -S %PM_SRC% -G Ninja ^
             -DCMAKE_C_COMPILER=clang-cl ^
             -DCMAKE_CXX_COMPILER=clang-cl ^
             -DCMAKE_BUILD_TYPE=Release ^
             -DCMAKE_TOOLCHAIN_FILE="%VCPKG_INSTALLATION_ROOT%\scripts\buildsystems\vcpkg.cmake" ^
             -DVCPKG_TARGET_TRIPLET=x64-windows-static ^
             -DCMAKE_INSTALL_PREFIX="%GITHUB_WORKSPACE%\install_projectm"
+            
           cmake --build projectm/build --target install
         shell: cmd
 
