@@ -1,0 +1,58 @@
+name: Build spotifast Windows x64
+
+on:
+  workflow_dispatch: # Permite lanzar la compilación manualmente con un clic
+  push:
+    branches: [ master, main ]
+
+jobs:
+  build:
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout spotifast
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Install dependencies via vcpkg
+        run: |
+          vcpkg install glew:x64-windows-static
+
+      - name: Clone and build libprojectM
+        shell: bash
+        run: |
+          git clone --recursive https://github.com/projectM-visualizer/projectm.git
+          cd projectm
+          mkdir build && cd build
+          cmake .. -G "Visual Studio 17 2022" -A x64 \
+            -DCMAKE_TOOLCHAIN_FILE="$VCPKG_INSTALLATION_ROOT/scripts/buildsystems/vcpkg.cmake" \
+            -DVCPKG_TARGET_TRIPLET=x64-windows-static \
+            -DCMAKE_INSTALL_PREFIX="$GITHUB_WORKSPACE/install_projectm"
+          cmake --build . --config Release --target install
+
+      - name: Configure and build spotifast
+        shell: bash
+        run: |
+          mkdir build && cd build
+          cmake .. -G "Visual Studio 17 2022" -A x64 \
+            -DCMAKE_TOOLCHAIN_FILE="$VCPKG_INSTALLATION_ROOT/scripts/buildsystems/vcpkg.cmake" \
+            -DCMAKE_PREFIX_PATH="$GITHUB_WORKSPACE/install_projectm"
+          cmake --build . --config Release
+
+      - name: Prepare build artifacts
+        shell: bash
+        run: |
+          mkdir -p output
+          # Copiar el ejecutable
+          cp build/Release/spotifast.exe output/ || cp build/spotifast.exe output/ || true
+          # Copiar DLLs si libprojectM generó alguna dinámica
+          if [ -d "$GITHUB_WORKSPACE/install_projectm/bin" ]; then
+            cp $GITHUB_WORKSPACE/install_projectm/bin/*.dll output/ || true
+          fi
+
+      - name: Upload spotifast artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: spotifast-windows-x64
+          path: output/
