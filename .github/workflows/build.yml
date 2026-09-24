@@ -15,68 +15,31 @@ jobs:
         with:
           submodules: recursive
 
-      # 1. Configura el entorno oficial de Visual Studio 2022 (x64)
       - name: Set up MSVC environment
         uses: ilammy/msvc-dev-cmd@v1
         with:
           arch: x64
 
-      # 2. Instala la dependencia necesaria con vcpkg
       - name: Install dependencies via vcpkg
         run: |
-          vcpkg install glew:x64-windows-static
+          vcpkg install glew:x64-windows-static projectm:x64-windows-static
 
-      # 3. Clona y compila libprojectM
-      - name: Clone and build libprojectM
-        shell: pwsh
-        run: |
-          git clone --recursive https://github.com/projectM-visualizer/projectm.git projectm
-          cd projectm
-          git checkout v3.1.12
-          git submodule update --init --recursive
-          cd ..
-
-          # Localizar automáticamente dónde está el CMakeLists.txt principal
-          $cmakeFile = Get-ChildItem -Path "projectm" -Filter "CMakeLists.txt" -Recurse | Where-Object { 
-              $_.DirectoryName -match "libprojectM$" -or $_.DirectoryName -eq "$((Get-Item .).FullName)\projectm" 
-          } | Select-Object -First 1
-
-          $sourceDir = if ($cmakeFile) {$cmakeFile.DirectoryName } else { "projectm" }
-          Write-Host "Directorio CMake detectado: $sourceDir"
-
-          cmake -B projectm/build -S $sourceDir -G Ninja `
-            -DCMAKE_C_COMPILER=clang-cl `
-            -DCMAKE_CXX_COMPILER=clang-cl `
-            -DCMAKE_BUILD_TYPE=Release `
-            -DCMAKE_TOOLCHAIN_FILE="$env:VCPKG_INSTALLATION_ROOT/scripts/buildsystems/vcpkg.cmake" `
-            -DVCPKG_TARGET_TRIPLET=x64-windows-static `
-            -DCMAKE_INSTALL_PREFIX="$env:GITHUB_WORKSPACE/install_projectm"
-
-          cmake --build projectm/build --target install
-
-      # 4. Configura y compila spotifast
       - name: Configure and build spotifast
-        shell: pwsh
+        shell: cmd
         run: |
-          cmake -B build -S . -G Ninja `
-            -DCMAKE_C_COMPILER=clang-cl `
-            -DCMAKE_CXX_COMPILER=clang-cl `
-            -DCMAKE_BUILD_TYPE=Release `
-            -DCMAKE_TOOLCHAIN_FILE="$env:VCPKG_INSTALLATION_ROOT/scripts/buildsystems/vcpkg.cmake" `
-            -DVCPKG_TARGET_TRIPLET=x64-windows-static `
-            -DCMAKE_PREFIX_PATH="$env:GITHUB_WORKSPACE/install_projectm"
+          cmake -B build -S . -G Ninja ^
+            -DCMAKE_BUILD_TYPE=Release ^
+            -DCMAKE_TOOLCHAIN_FILE="%VCPKG_INSTALLATION_ROOT%\scripts\buildsystems\vcpkg.cmake" ^
+            -DVCPKG_TARGET_TRIPLET=x64-windows-static
+          cmake --build build --config Release
 
-          cmake --build build
-
-      # 5. Empaqueta el ejecutable y librerías resultantes
       - name: Prepare build artifacts
+        shell: cmd
         run: |
           mkdir output
           if exist build\spotifast.exe copy build\spotifast.exe output\
-          if exist install_projectm\bin\*.dll copy install_projectm\bin\*.dll output\
-        shell: cmd
+          if exist build\Release\spotifast.exe copy build\Release\spotifast.exe output\
 
-      # 6. Sube el ZIP listo para descargar
       - name: Upload spotifast artifact
         uses: actions/upload-artifact@v4
         with:
